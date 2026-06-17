@@ -376,6 +376,41 @@ class EntriesTest extends TestCase
         $this->assertEquals(['one', 'two', 'three', 'four'], $augmented->get()->map->slug()->all());
     }
 
+    #[Test]
+    public function it_augments_using_the_repository()
+    {
+        $augmented = $this->fieldtype(['augment_with' => 'repository'])->augment(['123', '456', 'draft', 'scheduled', 'expired']);
+
+        $this->assertInstanceOf(EntryCollection::class, $augmented);
+        $this->assertEquals(['123', '456'], $augmented->map->id()->all());
+    }
+
+    #[Test]
+    public function it_returns_single_entry_with_max_items_one_when_augmenting_using_the_repository()
+    {
+        $augmented = $this->fieldtype(['augment_with' => 'repository', 'max_items' => 1])->augment(['456']);
+
+        $this->assertInstanceOf(Entry::class, $augmented);
+        $this->assertEquals('456', $augmented->id());
+    }
+
+    #[Test]
+    public function it_returns_null_when_entry_missing_with_max_items_one_when_augmenting_using_the_repository()
+    {
+        $augmented = $this->fieldtype(['augment_with' => 'repository', 'max_items' => 1])->augment(['missing']);
+
+        $this->assertNull($augmented);
+    }
+
+    #[Test]
+    public function it_always_augments_to_query()
+    {
+        config()->set('statamic.system.always_augment_to_query', true);
+        $augmented = $this->fieldtype(['augment_with' => 'repository'])->augment(['123']);
+
+        $this->assertInstanceOf(Builder::class, $augmented);
+    }
+
     public function fieldtype($config = [], $parent = null)
     {
         $field = new Field('test', array_merge([

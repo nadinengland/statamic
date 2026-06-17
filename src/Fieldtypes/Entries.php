@@ -6,6 +6,7 @@ use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Support\Collection as SupportCollection;
 use Statamic\Contracts\Data\Localization;
 use Statamic\Contracts\Entries\Entry as EntryContract;
+use Statamic\Contracts\Query\Builder;
 use Statamic\CP\Column;
 use Statamic\CP\Columns;
 use Statamic\Exceptions\CollectionNotFoundException;
@@ -144,6 +145,16 @@ class Entries extends Relationship
                             ->map->handle()
                             ->values()
                             ->all(),
+                    ],
+                    'augment_with' => [
+                        'display' => __('Augment With'),
+                        'instructions' => __('statamic::fieldtypes.entries.config.augment_with'),
+                        'type' => 'select',
+                        'default' => 'query',
+                        'options' => [
+                            'query' => __('Query'),
+                            'repository' => __('Repository'),
+                        ],
                     ],
                 ],
             ],
@@ -423,6 +434,20 @@ class Entries extends Relationship
 
     public function augment($values)
     {
+        $augment_using = $this->config('augment_with', 'query');
+
+        if (config('statamic.system.always_augment_to_query', false)) {
+            $augment_using = 'query';
+        }
+
+        return match ($augment_using) {
+            'repository' => $this->augmentWithRepository($values),
+            default => $this->augmentWithQuery($values),
+        };
+    }
+
+    protected function augmentWithQuery($values)
+    {
         $single = $this->config('max_items') === 1;
 
         if ($single && Blink::has($key = 'entries-augment-'.json_encode($values))) {
@@ -436,13 +461,26 @@ class Entries extends Relationship
             : $query;
     }
 
+    public function augmentWithRepository($values)
+    {
+        $entries = Entry::whereInId($values)
+            ->filter(fn ($entry) => $entry->status() === 'published')
+            ->values();
+
+        if ($this->config('max_items') === 1) {
+            return $entries->first();
+        }
+
+        return $entries;
+    }
+
     public function shallowAugment($values)
     {
         $items = $this->augment($values);
 
         if ($this->config('max_items') === 1) {
             $items = collect([$items]);
-        } else {
+        } else if ($items instanceof Builder) {
             $items = $items->get();
         }
 
